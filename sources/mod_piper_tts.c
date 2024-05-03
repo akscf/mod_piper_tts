@@ -1,6 +1,5 @@
 /**
  * (C)2023 aks
- * https://akscf.me/
  * https://github.com/akscf/
  **/
 #include "mod_piper_tts.h"
@@ -21,7 +20,7 @@ static switch_status_t speech_open(switch_speech_handle_t *sh, const char *voice
     tts_ctx->pool = sh->memory_pool;
     tts_ctx->fhnd = switch_core_alloc(tts_ctx->pool, sizeof(switch_file_handle_t));
     tts_ctx->voice = switch_core_strdup(tts_ctx->pool, voice);
-    tts_ctx->language = (globals.fl_voice_as_lang_code && voice ? switch_core_strdup(sh->memory_pool, voice) : "en");
+    tts_ctx->language = (globals.fl_voice_as_language && voice ? switch_core_strdup(sh->memory_pool, voice) : "en");
     tts_ctx->channels = channels;
     tts_ctx->samplerate = samplerate;
 
@@ -35,7 +34,7 @@ static switch_status_t speech_open(switch_speech_handle_t *sh, const char *voice
         }
     }
 
-    if(globals.fl_cache_disabled) {
+    if(!globals.fl_cache_enabled) {
         switch_uuid_str((char *)name_uuid, sizeof(name_uuid));
         tts_ctx->dst_fname = switch_core_sprintf(sh->memory_pool, "%s%s%s.%s", globals.cache_path, SWITCH_PATH_SEPARATOR, name_uuid, PIPER_FILE_ENCODING);
     }
@@ -51,10 +50,8 @@ static switch_status_t speech_close(switch_speech_handle_t *sh, switch_speech_fl
         switch_core_file_close(tts_ctx->fhnd);
     }
 
-    if(tts_ctx->dst_fname) {
-        if(globals.fl_cache_disabled) {
-            unlink(tts_ctx->dst_fname);
-        }
+    if(tts_ctx->dst_fname && !globals.fl_cache_enabled) {
+        unlink(tts_ctx->dst_fname);
     }
 
     return SWITCH_STATUS_SUCCESS;
@@ -202,10 +199,10 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_piper_tts_load) {
                 if(val) globals.piper_bin = switch_core_strdup(pool, val);
             } else if(!strcasecmp(var, "piper-opts")) {
                 if(val) globals.piper_opts = switch_core_strdup(pool, val);
-            } else if(!strcasecmp(var, "voice-name-as-language-code")) {
-                if(val) globals.fl_voice_as_lang_code = switch_true(val);
-            } else if(!strcasecmp(var, "cache-disable")) {
-                if(val) globals.fl_cache_disabled = switch_true(val);
+            } else if(!strcasecmp(var, "voice-name-as-language")) {
+                if(val) globals.fl_voice_as_language = switch_true(val);
+            } else if(!strcasecmp(var, "cache-enable")) {
+                if(val) globals.fl_cache_enabled = switch_true(val);
             }
         }
     }
@@ -260,7 +257,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_piper_tts_load) {
     speech_interface->speech_numeric_param_tts = speech_numeric_param_tts;
     speech_interface->speech_float_param_tts = speech_float_param_tts;
 
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "PiperTTS-%s\n", VERSION);
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "PiperTTS (%s)\n", VERSION);
 out:
     if(xml) {
         switch_xml_free(xml);

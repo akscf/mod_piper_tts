@@ -1,10 +1,10 @@
 <configuration name="piper_tts.conf" description="">
     <settings>
         <param name="cache-path" value="/tmp/piper-tts-cache" />
-        <param name="cache-disable" value="false" />
+        <param name="cache-enable" value="true" />
         <param name="piper-bin" value="/opt/piper/lib/piper" />
         <param name="piper-opts" value="" />
-        <param name="voice-name-as-language-code" value="true" />
+        <param name="voice-name-as-language" value="true" />
     </settings>
 
     <models>

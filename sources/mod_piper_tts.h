@@ -1,6 +1,5 @@
 /**
  * (C)2023 aks
- * https://akscf.me/
  * https://github.com/akscf/
  **/
 #ifndef MOD_PIPER_TTS_H
@@ -28,8 +27,8 @@ typedef struct {
     const char              *cache_path;
     const char              *piper_bin;
     const char              *piper_opts;
-    uint8_t                 fl_cache_disabled;
-    uint8_t                 fl_voice_as_lang_code;
+    uint8_t                 fl_cache_enabled;
+    uint8_t                 fl_voice_as_language;
 } globals_t;
 
 typedef struct {

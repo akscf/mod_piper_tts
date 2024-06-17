@@ -1,16 +1,51 @@
-/**
- * (C)2023 aks
- * https://github.com/akscf/
- **/
+/*
+ * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
+ *
+ * Version: MPL 1.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
+ * Module Contributor(s):
+ *  Konstantin Alexandrin <akscfx@gmail.com>
+ *
+ *
+ * mod_piper_tts.c -- pipe interface
+ *
+ * Provides an interface to use PIPER TTS in the Freeswitch.
+ *
+ */
 #include "mod_piper_tts.h"
 
-globals_t globals;
+static piper_globals_t globals;
 
 SWITCH_MODULE_LOAD_FUNCTION(mod_piper_tts_load);
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_piper_tts_shutdown);
 SWITCH_MODULE_DEFINITION(mod_piper_tts, mod_piper_tts_load, mod_piper_tts_shutdown, NULL);
 
-// ------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+static piper_model_info_t *piper_lookup_model(const char *lang) {
+    piper_model_info_t *model = NULL;
+
+    if(!lang) {
+        return NULL;
+    }
+
+    switch_mutex_lock(globals.mutex);
+    model = switch_core_hash_find(globals.models, lang);
+    switch_mutex_unlock(globals.mutex);
+
+    return model;
+}
+
 static switch_status_t speech_open(switch_speech_handle_t *sh, const char *voice, int samplerate, int channels, switch_speech_flag_t *flags) {
     char name_uuid[SWITCH_UUID_FORMATTED_LENGTH + 1] = { 0 };
     switch_status_t status = SWITCH_STATUS_SUCCESS;
@@ -29,15 +64,21 @@ static switch_status_t speech_open(switch_speech_handle_t *sh, const char *voice
     if(tts_ctx->language) {
         tts_ctx->model_info = piper_lookup_model(tts_ctx->language);
         if(!tts_ctx->model_info) {
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't find model for language: '%s'\n", tts_ctx->language);
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Language '%s' not registered!\n", tts_ctx->language);
             switch_goto_status(SWITCH_STATUS_FALSE, out);
         }
     }
 
     if(!globals.fl_cache_enabled) {
         switch_uuid_str((char *)name_uuid, sizeof(name_uuid));
-        tts_ctx->dst_fname = switch_core_sprintf(sh->memory_pool, "%s%s%s.%s", globals.cache_path, SWITCH_PATH_SEPARATOR, name_uuid, PIPER_FILE_ENCODING);
+        tts_ctx->dst_fname = switch_core_sprintf(sh->memory_pool, "%s%spiper-%s.%s",
+                                                 globals.tmp_path,
+                                                 SWITCH_PATH_SEPARATOR,
+                                                 name_uuid,
+                                                 PIPER_FILE_ENCODING
+                                );
     }
+
 out:
     return status;
 }
@@ -58,22 +99,27 @@ static switch_status_t speech_close(switch_speech_handle_t *sh, switch_speech_fl
 }
 
 static switch_status_t speech_feed_tts(switch_speech_handle_t *sh, char *text, switch_speech_flag_t *flags) {
-    tts_ctx_t *tts_ctx = (tts_ctx_t *) sh->private_info;
-    switch_status_t status = SWITCH_STATUS_SUCCESS;
+    tts_ctx_t *tts_ctx = (tts_ctx_t *)sh->private_info;
     char digest[SWITCH_MD5_DIGEST_STRING_SIZE + 1] = { 0 };
-    const void *ptr = NULL;
-    uint32_t recv_len = 0;
+    switch_status_t status = SWITCH_STATUS_SUCCESS;
 
     assert(tts_ctx != NULL);
 
     if(!tts_ctx->dst_fname) {
-        switch_md5_string(digest, (void *) text, strlen(text));
-        tts_ctx->dst_fname = switch_core_sprintf(sh->memory_pool, "%s%s%s.%s", globals.cache_path, SWITCH_PATH_SEPARATOR, digest, PIPER_FILE_ENCODING);
+        switch_md5_string(digest, (void *)text, strlen(text));
+        tts_ctx->dst_fname = switch_core_sprintf(sh->memory_pool, "%s%s%s.%s",
+                                                 globals.cache_path,
+                                                 SWITCH_PATH_SEPARATOR,
+                                                 digest,
+                                                 PIPER_FILE_ENCODING
+                            );
     }
 
     if(switch_file_exists(tts_ctx->dst_fname, tts_ctx->pool) == SWITCH_STATUS_SUCCESS) {
-        if((status = switch_core_file_open(tts_ctx->fhnd, tts_ctx->dst_fname, tts_ctx->channels, tts_ctx->samplerate, (SWITCH_FILE_FLAG_READ | SWITCH_FILE_DATA_SHORT), NULL)) != SWITCH_STATUS_SUCCESS) {
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't open file: %s\n", tts_ctx->dst_fname);
+        if((status = switch_core_file_open(tts_ctx->fhnd, tts_ctx->dst_fname, tts_ctx->channels, tts_ctx->samplerate,
+                                           (SWITCH_FILE_FLAG_READ | SWITCH_FILE_DATA_SHORT), sh->memory_pool)) != SWITCH_STATUS_SUCCESS) {
+
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to open file: %s\n", tts_ctx->dst_fname);
             switch_goto_status(SWITCH_STATUS_FALSE, out);
         }
     } else {
@@ -85,18 +131,25 @@ static switch_status_t speech_feed_tts(switch_speech_handle_t *sh, char *text, s
                 tts_ctx->model_info = piper_lookup_model(tts_ctx->language);
             }
             if(!tts_ctx->model_info) {
-                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't find model for language: '%s'\n", tts_ctx->language);
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to lookup the model for lang: %s\n", tts_ctx->language);
                 switch_goto_status(SWITCH_STATUS_FALSE, out);
             }
         }
 
         textq = switch_util_quote_shell_arg(text);
-        cmd = switch_mprintf("echo %s | %s %s --model '%s' --output_file '%s'", textq, globals.piper_bin, (globals.piper_opts ? globals.piper_opts : ""), tts_ctx->model_info->model, tts_ctx->dst_fname);
+        cmd = switch_mprintf("echo %s | %s %s --model '%s' --output_file '%s'",
+                             textq, globals.piper_bin,
+                             globals.piper_opts ? globals.piper_opts : "",
+                             tts_ctx->model_info->model,
+                             tts_ctx->dst_fname
+                );
 
-        // switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "PIPER: [%s]\n", cmd);
+#ifdef PIPER_DEBUG
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "PIPER-CMD: [%s]\n", cmd);
+#endif
 
-        if(switch_system(cmd, SWITCH_TRUE) != 0) {
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to execute command: %s\n", cmd);
+        if(switch_system(cmd, SWITCH_TRUE)) {
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to perform cmd: %s\n", cmd);
             status = SWITCH_STATUS_FALSE;
         }
 
@@ -105,8 +158,10 @@ static switch_status_t speech_feed_tts(switch_speech_handle_t *sh, char *text, s
 
         if(status == SWITCH_STATUS_SUCCESS) {
             if(switch_file_exists(tts_ctx->dst_fname, tts_ctx->pool) == SWITCH_STATUS_SUCCESS) {
-                if((status = switch_core_file_open(tts_ctx->fhnd, tts_ctx->dst_fname, tts_ctx->channels, tts_ctx->samplerate, (SWITCH_FILE_FLAG_READ | SWITCH_FILE_DATA_SHORT), NULL)) != SWITCH_STATUS_SUCCESS) {
-                    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't open file: %s\n", tts_ctx->dst_fname);
+                if((status = switch_core_file_open(tts_ctx->fhnd, tts_ctx->dst_fname, tts_ctx->channels, tts_ctx->samplerate,
+                                                   (SWITCH_FILE_FLAG_READ | SWITCH_FILE_DATA_SHORT), sh->memory_pool)) != SWITCH_STATUS_SUCCESS) {
+
+                    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to open file: %s\n", tts_ctx->dst_fname);
                     switch_goto_status(SWITCH_STATUS_FALSE, out);
                 }
             } else {
@@ -115,6 +170,7 @@ static switch_status_t speech_feed_tts(switch_speech_handle_t *sh, char *text, s
             }
         }
     }
+
 out:
     return status;
 }
@@ -134,8 +190,8 @@ static switch_status_t speech_read_tts(switch_speech_handle_t *sh, void *data, s
         return SWITCH_STATUS_FALSE;
     }
 
-    *data_len = (len * 2);
-    if(data_len == 0) {
+    *data_len = (len * sizeof(int16_t));
+    if(!data_len) {
         switch_core_file_close(tts_ctx->fhnd);
         return SWITCH_STATUS_BREAK;
     }
@@ -144,7 +200,8 @@ static switch_status_t speech_read_tts(switch_speech_handle_t *sh, void *data, s
 }
 
 static void speech_flush_tts(switch_speech_handle_t *sh) {
-    tts_ctx_t *tts_ctx = (tts_ctx_t *) sh->private_info;
+    tts_ctx_t *tts_ctx = (tts_ctx_t *)sh->private_info;
+
     assert(tts_ctx != NULL);
 
     if(tts_ctx->fhnd != NULL && tts_ctx->fhnd->file_interface != NULL) {
@@ -173,7 +230,6 @@ static void speech_float_param_tts(switch_speech_handle_t *sh, char *param, doub
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------------------------------------------------------------------------
-#define CONFIG_NAME "piper_tts.conf"
 SWITCH_MODULE_LOAD_FUNCTION(mod_piper_tts_load) {
     switch_status_t status = SWITCH_STATUS_SUCCESS;
     switch_xml_t cfg, xml, settings, param, xmodels, xmodel;
@@ -183,8 +239,8 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_piper_tts_load) {
     switch_mutex_init(&globals.mutex, SWITCH_MUTEX_NESTED, pool);
     switch_core_hash_init(&globals.models);
 
-    if((xml = switch_xml_open_cfg(CONFIG_NAME, &cfg, NULL)) == NULL) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't open configuration file: %s\n", CONFIG_NAME);
+    if((xml = switch_xml_open_cfg(MOD_CONFIG_NAME, &cfg, NULL)) == NULL) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to open configuration: %s\n", MOD_CONFIG_NAME);
         switch_goto_status(SWITCH_STATUS_GENERR, out);
     }
 
@@ -221,7 +277,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_piper_tts_load) {
             }
 
             if((model_info = switch_core_alloc(pool, sizeof(piper_model_info_t))) == NULL) {
-                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "mem fail\n");
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "switch_core_alloc()\n");
                 switch_goto_status(SWITCH_STATUS_GENERR, out);
             }
             model_info->lang = switch_core_strdup(pool, lang);
@@ -232,7 +288,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_piper_tts_load) {
     }
 
     if(!globals.piper_bin) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "piper-bin - not defined\n");
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "piper-bin - not determined!\n");
         switch_goto_status(SWITCH_STATUS_FALSE, out);
     }
 
@@ -254,16 +310,18 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_piper_tts_load) {
     speech_interface->speech_flush_tts = speech_flush_tts;
 
     speech_interface->speech_text_param_tts = speech_text_param_tts;
-    speech_interface->speech_numeric_param_tts = speech_numeric_param_tts;
     speech_interface->speech_float_param_tts = speech_float_param_tts;
+    speech_interface->speech_numeric_param_tts = speech_numeric_param_tts;
 
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "PiperTTS (%s)\n", VERSION);
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "PiperTTS (%s)\n", MOD_VERSION);
 out:
     if(xml) {
         switch_xml_free(xml);
     }
     if(status != SWITCH_STATUS_SUCCESS) {
-        if(globals.models) { switch_core_hash_destroy(&globals.models); }
+        if(globals.models) {
+            switch_core_hash_destroy(&globals.models);
+        }
     }
     return status;
 }

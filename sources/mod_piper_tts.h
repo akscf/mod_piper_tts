@@ -23,8 +23,6 @@
 #define MOD_PIPER_TTS_H
 
 #include <switch.h>
-#include <stdint.h>
-#include <string.h>
 
 #define MOD_VERSION         "1.0"
 #define MOD_CONFIG_NAME     "piper_tts.conf"

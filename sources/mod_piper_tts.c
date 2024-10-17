@@ -18,9 +18,12 @@
  *  Konstantin Alexandrin <akscfx@gmail.com>
  *
  *
- * mod_piper_tts.c -- pipe interface
+ * Provides the ability to use PIPER TTS in the Freeswitch
+ * https://github.com/rhasspy/piper
  *
- * Provides an interface to use PIPER TTS in the Freeswitch.
+ *
+ * Development repository:
+ * https://github.com/akscf/mod_piper_tts
  *
  */
 #include "mod_piper_tts.h"

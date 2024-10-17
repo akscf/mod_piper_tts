@@ -1,5 +1,5 @@
 <p>
-  Freeswitch TTS module, provides a simple frontend for <a href="https://github.com/rhasspy/piper" target="_blank">piper</a>.<br>
+  Provides the ability to use <a href="https://github.com/rhasspy/piper" target="_blank">piper</a> in the Freeswitch.
 </p>
 
 ### Usage example

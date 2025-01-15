@@ -24,7 +24,7 @@
 
 #include <switch.h>
 
-#define MOD_VERSION         "1.0"
+#define MOD_VERSION         "1.0.1"
 #define MOD_CONFIG_NAME     "piper_tts.conf"
 #define PIPER_FILE_ENCODING "wav"
 // #define PIPER_DEBUG
@@ -54,6 +54,7 @@ typedef struct {
     char                    *dst_fname;
     uint32_t                samplerate;
     uint32_t                channels;
+    uint8_t                 fl_cache_enabled;
 } tts_ctx_t;
 
 

@@ -50,7 +50,6 @@ static piper_model_info_t *piper_lookup_model(const char *lang) {
 }
 
 static switch_status_t speech_open(switch_speech_handle_t *sh, const char *voice, int samplerate, int channels, switch_speech_flag_t *flags) {
-    char name_uuid[SWITCH_UUID_FORMATTED_LENGTH + 1] = { 0 };
     switch_status_t status = SWITCH_STATUS_SUCCESS;
     tts_ctx_t *tts_ctx = NULL;
 
@@ -61,6 +60,7 @@ static switch_status_t speech_open(switch_speech_handle_t *sh, const char *voice
     tts_ctx->language = (globals.fl_voice_as_language && voice ? switch_core_strdup(sh->memory_pool, voice) : "en");
     tts_ctx->channels = channels;
     tts_ctx->samplerate = samplerate;
+    tts_ctx->fl_cache_enabled = globals.fl_cache_enabled;
 
     sh->private_info = tts_ctx;
 
@@ -70,16 +70,6 @@ static switch_status_t speech_open(switch_speech_handle_t *sh, const char *voice
             switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Language '%s' not registered!\n", tts_ctx->language);
             switch_goto_status(SWITCH_STATUS_FALSE, out);
         }
-    }
-
-    if(!globals.fl_cache_enabled) {
-        switch_uuid_str((char *)name_uuid, sizeof(name_uuid));
-        tts_ctx->dst_fname = switch_core_sprintf(sh->memory_pool, "%s%spiper-%s.%s",
-                                                 globals.tmp_path,
-                                                 SWITCH_PATH_SEPARATOR,
-                                                 name_uuid,
-                                                 PIPER_FILE_ENCODING
-                                );
     }
 
 out:
@@ -94,8 +84,8 @@ static switch_status_t speech_close(switch_speech_handle_t *sh, switch_speech_fl
         switch_core_file_close(tts_ctx->fhnd);
     }
 
-    if(tts_ctx->dst_fname && !globals.fl_cache_enabled) {
-        unlink(tts_ctx->dst_fname);
+    if(!tts_ctx->fl_cache_enabled) {
+        if(tts_ctx->dst_fname) unlink(tts_ctx->dst_fname);
     }
 
     return SWITCH_STATUS_SUCCESS;
@@ -103,19 +93,18 @@ static switch_status_t speech_close(switch_speech_handle_t *sh, switch_speech_fl
 
 static switch_status_t speech_feed_tts(switch_speech_handle_t *sh, char *text, switch_speech_flag_t *flags) {
     tts_ctx_t *tts_ctx = (tts_ctx_t *)sh->private_info;
-    char digest[SWITCH_MD5_DIGEST_STRING_SIZE + 1] = { 0 };
     switch_status_t status = SWITCH_STATUS_SUCCESS;
+    char digest[SWITCH_MD5_DIGEST_STRING_SIZE + 1] = { 0 };
+    char uuid[SWITCH_UUID_FORMATTED_LENGTH + 1] = { 0 };
 
     assert(tts_ctx != NULL);
 
-    if(!tts_ctx->dst_fname) {
+    if(tts_ctx->fl_cache_enabled) {
         switch_md5_string(digest, (void *)text, strlen(text));
-        tts_ctx->dst_fname = switch_core_sprintf(sh->memory_pool, "%s%s%s.%s",
-                                                 globals.cache_path,
-                                                 SWITCH_PATH_SEPARATOR,
-                                                 digest,
-                                                 PIPER_FILE_ENCODING
-                            );
+        tts_ctx->dst_fname = switch_core_sprintf(sh->memory_pool, "%s%s%s.%s", globals.cache_path, SWITCH_PATH_SEPARATOR, digest, PIPER_FILE_ENCODING);
+    } else {
+        switch_uuid_str((char *)uuid, sizeof(uuid));
+        tts_ctx->dst_fname = switch_core_sprintf(sh->memory_pool, "%s%s%s.%s", globals.tmp_path, SWITCH_PATH_SEPARATOR, uuid, PIPER_FILE_ENCODING);
     }
 
     if(switch_file_exists(tts_ctx->dst_fname, tts_ctx->pool) == SWITCH_STATUS_SUCCESS) {
@@ -221,6 +210,8 @@ static void speech_text_param_tts(switch_speech_handle_t *sh, char *param, const
         if(val) {  tts_ctx->language = switch_core_strdup(sh->memory_pool, val); }
     } else if(strcasecmp(param, "voice") == 0) {
         if(val) {  tts_ctx->voice = switch_core_strdup(sh->memory_pool, val); }
+    } else if(strcasecmp(param, "cache") == 0) {
+        if(val) tts_ctx->fl_cache_enabled = switch_true(val);
     }
 }
 

@@ -1,5 +1,5 @@
 <p>
-  Provides the ability to use <a href="https://github.com/rhasspy/piper" target="_blank">piper</a> in the Freeswitch.
+  Allows to use <a href="https://github.com/rhasspy/piper" target="_blank">piper</a> in the Freeswitch.
 </p>
 
 ### Usage example
@@ -12,5 +12,12 @@
         <action application="hangup"/>
     </condition>
 </extension>
+
+```
+
+### mod_quickjs
+```javascript
+
+session.speak('piper', 'en', 'Hello, how can I halp you?');
 
 ```

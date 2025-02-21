@@ -1,7 +1,7 @@
 <configuration name="piper_tts.conf" description="">
     <settings>
         <!--
-            а simple cache system, allows to reuse already spoken text
+            cache (allows to reuse already spoken text)
         -->
         <param name="cache-path" value="/tmp/piper-tts-cache" />
         <param name="cache-enable" value="false" />

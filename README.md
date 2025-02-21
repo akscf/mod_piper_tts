@@ -17,7 +17,10 @@
 
 ### mod_quickjs
 ```javascript
+session.ttsEngine= 'piper';
+session.language = 'en';
 
-session.speak('piper', 'en', 'Hello, how can I halp you?');
-
+session.speak('Hello world!');
 ```
+
+

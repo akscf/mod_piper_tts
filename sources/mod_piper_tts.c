@@ -18,7 +18,7 @@
  *  Konstantin Alexandrin <akscfx@gmail.com>
  *
  *
- * Provides PIPER TTS for the Freeswitch
+ * PIPER Text-To-Speech for the Freeswitch
  * https://github.com/rhasspy/piper
  *
  *

@@ -24,10 +24,12 @@
 
 #include <switch.h>
 
-#define MOD_VERSION         "1.0.1"
+#define MOD_VERSION         "v1.0.2"
 #define MOD_CONFIG_NAME     "piper_tts.conf"
 #define PIPER_FILE_ENCODING "wav"
-// #define PIPER_DEBUG
+
+//#define MOD_PIPER_TTS_DEBUG
+
 
 typedef struct {
     switch_mutex_t          *mutex;
@@ -42,15 +44,14 @@ typedef struct {
 
 typedef struct {
     char                    *lang;
-    char                    *model;
-} piper_model_info_t;
+    char                    *path;
+} tts_model_info_t;
 
 typedef struct {
-    piper_model_info_t      *model_info;
     switch_memory_pool_t    *pool;
     switch_file_handle_t    *fhnd;
     char                    *language;
-    char                    *voice;
+    char                    *model;
     char                    *dst_fname;
     uint32_t                samplerate;
     uint32_t                channels;
